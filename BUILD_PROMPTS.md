@@ -101,6 +101,9 @@ Set up a brand-new monorepo from scratch (no repo exists yet) named `compliance-
 
 Do not run install commands yourself — create files only. In your Handoff Report, walk the human through: opening Terminal, `cd`-ing to their home folder, `git init`, creating and activating a Python virtual environment (`python3 -m venv .venv`, `source .venv/bin/activate`), `pip install -r requirements.txt`, `npm install` in frontend, copying `.env.example` to `.env`, and starting both servers. Explain each command. Verification should confirm `/health` returns ok, the frontend home page shows "ok", and `.env` is not staged by Git.
 
+> **Project state note after Sub-Phase 1.1 (2026-06-04):**
+> Sub-Phase 1.1 has been implemented, the initial scaffold has been committed locally, and a private remote GitHub repository has been created and connected as the project remote. Continue future work from Sub-Phase 1.2 onward using this local repo plus GitHub remote backup/sync. Keep `.env`, private PDFs, generated Chroma data, and SQLite databases out of Git.
+
 ---
 
 ## Sub-Phase 1.2 — PDF Parsing Pipeline
