@@ -1,0 +1,11 @@
+.env
+__pycache__/
+*.pyc
+.venv/
+node_modules/
+.next/
+backend/data/chroma/
+backend/data/app.db
+backend/data/source_pdfs/**/*.pdf
+frontend/.env.local
+
