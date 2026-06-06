@@ -4,6 +4,8 @@
 >
 > You are an agentic coding assistant building a project for a **beginner** developer on **macOS**. This document is your complete build specification. The human will reference this whole file to you across sessions — they will NOT copy-paste individual sections. You are responsible for tracking progress and knowing which sub-phase comes next.
 >
+> **Agent operating guide:** this repo now has `AGENTS.md`. Before acting on any future phase prompt, read `AGENTS.md` first, then return here for the detailed roadmap, acceptance criteria, and current progress notes. Keep `BUILD_PROMPTS.md` as the phase-by-phase source of truth. After each completed sub-phase, update the relevant project-state note in this file. Keep `AGENTS.md` stable unless the project-level operating rules change.
+>
 > **Your operating rules for the entire project:**
 > 1. Build **one sub-phase at a time, in order.** Do not jump ahead or combine sub-phases.
 > 2. After finishing each sub-phase, **STOP** and produce a **Handoff Report** (format defined below). Do not begin the next sub-phase until the human confirms the manual steps are done and verification passed.
@@ -118,6 +120,9 @@ Implement PDF parsing in `backend/app/pdf/`.
 
 In your Handoff Report, tell the human to place a sample PDF, activate the venv, and run the CLI. Verification: correct page count, non-zero text per page (or a clear explanation of how image-only scans degrade gracefully), a PNG appears, no base64 floods the terminal.
 
+> **Project state note after Sub-Phase 1.2 (2026-06-04):**
+> Sub-Phase 1.2 has been implemented with a PyMuPDF parser, Pydantic parse-result models, per-page PNG rendering at 150 DPI, base64 image payloads for future Claude vision use, and a summary-only CLI at `python -m app.pdf.parse <path-to-pdf>`. Continue future work from Sub-Phase 1.3 — Knowledge Base Ingestion (BCA, SCDF, URA), after the human confirms the PDF parser CLI works on their sample PDF.
+
 ---
 
 ## Sub-Phase 1.3 — Knowledge Base Ingestion (BCA, SCDF, URA)
@@ -133,6 +138,9 @@ Implement the RAG ingestion pipeline in `backend/app/rag/` and a CLI at `backend
 - Provide a small retrieval sanity-check function/script: given a query + agency, return the top 3 chunks with source filename and page.
 
 In your Handoff Report, instruct the human to: create their Anthropic API key and paste it into the root `.env` (explain `.env` is git-ignored), sort their BCA/SCDF/URA PDFs into the matching lowercase folders, run ingestion per agency, and warn them the first run downloads the embedding model (one-time, a few hundred MB). Verification: `chroma/` is non-empty, non-zero chunk counts per agency, the sanity check returns 3 relevant chunks with correct metadata, `--reset` doesn't duplicate.
+
+> **Project state note after Sub-Phase 1.3 (2026-06-04):**
+> Sub-Phase 1.3 has been implemented with local ChromaDB collections per agency, free local HuggingFace embeddings, section-aware PDF text chunking, idempotent per-PDF upserts, an ingestion CLI at `python scripts/ingest.py`, and a retrieval sanity-check CLI at `python scripts/retrieve.py`. Continue future work from Sub-Phase 1.4 — Compliance Review Engine (Phase 1 milestone), after the human confirms BCA/SCDF/URA PDFs have been sorted and ingestion/retrieval verification passes.
 
 ---
 
@@ -162,6 +170,9 @@ Implement the review engine in `backend/app/review/` tying PDF parsing + RAG + C
 - CLI: `python -m app.review.run <path-to-pdf>` prints the JSON and writes it to a file.
 
 In your Handoff Report, confirm the human has a valid `ANTHROPIC_API_KEY` (this sub-phase spends real money — give a rough per-run cost), tell them how to run it on a real drawing, and tell them to spot-check 2–3 cited clauses against their source PDFs. Verification: valid JSON matching the schema, issues tagged by correct agency, each issue has clause reference + severity + resolution, concurrency visible in timing/logs, cited clauses are real. **Then instruct the human to make the Phase 1 Git commit** (explain `git add .` and `git commit -m "..."` in plain language). State the Phase 2 prerequisite: remaining agency PDFs (LTA, NParks, NEA, PUB) ready to sort.
+
+> **Project state note after Sub-Phase 1.4 (2026-06-06):**
+> Sub-Phase 1.4 has been implemented with a structured review schema, editable Claude system prompt, async BCA/SCDF/URA review engine, validated Claude JSON with one corrective retry, and a CLI at `python -m app.review.run <path-to-pdf>` that prints and writes the compliance report JSON. Phase 1 is ready for human verification on a real drawing PDF, cited-clause spot checks, and the Phase 1 Git commit. Continue future work from Sub-Phase 2.1 — Ingest Remaining 4 Agencies, after the human confirms Phase 1 verification passes and the LTA/NParks/NEA/PUB PDFs are ready to sort.
 
 ---
 

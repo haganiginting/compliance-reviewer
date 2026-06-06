@@ -6,10 +6,14 @@ from pydantic import BaseModel
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
 ENV_PATH = ROOT_DIR / ".env"
+DATA_DIR = ROOT_DIR / "backend" / "data"
+SOURCE_PDFS_DIR = DATA_DIR / "source_pdfs"
+CHROMA_DIR = DATA_DIR / "chroma"
 
 load_dotenv(ENV_PATH)
 
-CLAUDE_MODEL = "claude-3-5-haiku-latest"
+CLAUDE_MODEL = "claude-haiku-4-5-20251001"
+EMBEDDING_MODEL = "BAAI/bge-small-en-v1.5"
 
 
 class Agency(BaseModel):
@@ -72,4 +76,3 @@ AGENCIES: dict[str, Agency] = {
 
 
 CORE_AGENCIES = tuple(code for code, agency in AGENCIES.items() if agency.core)
-
