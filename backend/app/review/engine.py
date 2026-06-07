@@ -13,7 +13,7 @@ from typing import Any
 from anthropic import AsyncAnthropic
 from pydantic import ValidationError
 
-from app.config import AGENCIES, CLAUDE_MODEL, CORE_AGENCIES
+from app.config import AGENCIES, ACTIVE_AGENCY_CODES, CLAUDE_MODEL
 from app.pdf.models import ParsedPage, ParsedPdf
 from app.pdf.parser import parse_pdf
 from app.rag.models import RetrievedChunk
@@ -46,9 +46,9 @@ async def review_pdf(pdf_path: str | Path) -> ComplianceReport:
 
     # Each agency review performs its own retrieval and Claude request. Running
     # them concurrently overlaps local retrieval and network wait time, so the
-    # Phase 1 CLI returns roughly as fast as the slowest agency rather than the
-    # sum of all three.
-    logger.info("Starting concurrent reviews for: %s", ", ".join(code.upper() for code in CORE_AGENCIES))
+    # CLI returns roughly as fast as the slowest active agency rather than the
+    # sum of each agency's review time.
+    logger.info("Starting concurrent reviews for: %s", ", ".join(code.upper() for code in ACTIVE_AGENCY_CODES))
     agency_tasks = [
         _review_agency(
             agency_code=agency_code,
@@ -56,7 +56,7 @@ async def review_pdf(pdf_path: str | Path) -> ComplianceReport:
             client=client,
             system_prompt=system_prompt,
         )
-        for agency_code in CORE_AGENCIES
+        for agency_code in ACTIVE_AGENCY_CODES
     ]
     agency_reviews = await asyncio.gather(*agency_tasks)
 
@@ -142,7 +142,7 @@ def _retrieve_chunks_threadsafe(agency_code: str, query: str) -> list[RetrievedC
         except Exception as exc:
             raise ReviewEngineError(
                 f"Could not retrieve clauses for {agency_code.upper()} from the local Chroma database. "
-                "Confirm Sub-Phase 1.3 ingestion completed for BCA, SCDF, and URA, then rerun the review."
+                "Confirm ingestion completed for every active agency in app/config.py, then rerun the review."
             ) from exc
 
 
@@ -296,7 +296,7 @@ def _ensure_payload_size(parsed_pdf: ParsedPdf) -> None:
     if total_image_chars > MAX_IMAGE_BASE64_CHARS:
         approx_mb = total_image_chars * 3 / 4 / 1_000_000
         raise ReviewEngineError(
-            "The rendered drawing images are too large for a single Phase 1 Claude request "
+            "The rendered drawing images are too large for a single Claude review request "
             f"({approx_mb:.1f} MB of PNG data). Try a smaller PDF or split the drawing into fewer pages."
         )
 

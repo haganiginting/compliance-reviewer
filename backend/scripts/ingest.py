@@ -9,13 +9,13 @@ BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
     sys.path.insert(0, str(BACKEND_DIR))
 
-from app.config import CORE_AGENCIES  # noqa: E402
+from app.config import ACTIVE_AGENCY_CODES  # noqa: E402
 from app.rag.ingestion import ingest_agencies  # noqa: E402
 
 
 def main() -> None:
     args = _parse_args()
-    agency_codes = [args.agency] if args.agency else list(CORE_AGENCIES)
+    agency_codes = [args.agency] if args.agency else list(ACTIVE_AGENCY_CODES)
     summaries = ingest_agencies(agency_codes=agency_codes, reset=args.reset)
 
     for summary in summaries:
@@ -35,7 +35,10 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--agency",
         default=None,
-        help="Lowercase agency code to ingest one folder, such as bca, scdf, or ura. Defaults to BCA/SCDF/URA.",
+        help=(
+            "Lowercase agency code to ingest one folder, such as lta, nparks, nea, or pub. "
+            "Defaults to all active non-ICA agencies."
+        ),
     )
     parser.add_argument(
         "--reset",
@@ -47,4 +50,3 @@ def _parse_args() -> argparse.Namespace:
 
 if __name__ == "__main__":
     main()
-

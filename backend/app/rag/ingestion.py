@@ -13,7 +13,7 @@ from llama_index.core.schema import Document, MetadataMode
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.vector_stores.chroma import ChromaVectorStore
 
-from app.config import AGENCIES, CHROMA_DIR, CORE_AGENCIES, EMBEDDING_MODEL, SOURCE_PDFS_DIR
+from app.config import AGENCIES, ACTIVE_AGENCY_CODES, CHROMA_DIR, EMBEDDING_MODEL, SOURCE_PDFS_DIR
 from app.rag.models import AgencyIngestSummary
 
 
@@ -33,7 +33,7 @@ def ingest_agencies(
     source_root: Path = SOURCE_PDFS_DIR,
     chroma_dir: Path = CHROMA_DIR,
 ) -> list[AgencyIngestSummary]:
-    agencies = agency_codes or list(CORE_AGENCIES)
+    agencies = agency_codes or list(ACTIVE_AGENCY_CODES)
     return [
         ingest_agency(
             agency_code=agency,

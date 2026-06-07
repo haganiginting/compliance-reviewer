@@ -9,6 +9,8 @@ ENV_PATH = ROOT_DIR / ".env"
 DATA_DIR = ROOT_DIR / "backend" / "data"
 SOURCE_PDFS_DIR = DATA_DIR / "source_pdfs"
 CHROMA_DIR = DATA_DIR / "chroma"
+UPLOADS_DIR = DATA_DIR / "uploads"
+DATABASE_PATH = DATA_DIR / "app.db"
 
 load_dotenv(ENV_PATH)
 
@@ -76,3 +78,4 @@ AGENCIES: dict[str, Agency] = {
 
 
 CORE_AGENCIES = tuple(code for code, agency in AGENCIES.items() if agency.core)
+ACTIVE_AGENCY_CODES = ("bca", "scdf", "ura", "lta", "nparks", "nea", "pub")

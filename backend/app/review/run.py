@@ -37,7 +37,7 @@ def main() -> None:
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Run a BCA, SCDF, and URA compliance review for one drawing PDF."
+        description="Run an active-agency compliance review for one drawing PDF."
     )
     parser.add_argument("pdf_path", type=Path, help="Path to the drawing PDF to review.")
     parser.add_argument(

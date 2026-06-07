@@ -1,4 +1,5 @@
 fastapi
+python-multipart
 uvicorn[standard]
 python-dotenv
 pydantic
@@ -8,4 +9,4 @@ chromadb
 anthropic
 llama-index-vector-stores-chroma
 llama-index-embeddings-huggingface
-
+reportlab

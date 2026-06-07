@@ -193,6 +193,9 @@ Extend the knowledge base from 3 to 7 agencies (the ingest code is already gener
 
 Handoff Report: tell the human to sort the 4 new agency PDF sets into their folders, run ingestion per agency, and re-run a CLI review. Verification: all 7 collections non-empty, a CLI review returns up to 7 agencies, toggling an agency off in config removes it next run.
 
+> **Project state note after Sub-Phase 2.1 (2026-06-06):**
+> Sub-Phase 2.1 has been implemented with a configurable `ACTIVE_AGENCY_CODES` list in `app/config.py`, default ingestion/review coverage for the 7 non-ICA agencies, and updated CLI wording. ICA remains defined but inactive. Continue future work from Sub-Phase 2.2 — Backend API + SQLite Storage, after the human confirms LTA/NParks/NEA/PUB PDFs have been sorted, ingested, and verified with a 7-agency CLI review.
+
 ---
 
 ## Sub-Phase 2.2 — Backend API + SQLite Storage
@@ -206,6 +209,9 @@ Expose the review engine over HTTP via FastAPI in `backend/app/api/`, and build 
 - Enable CORS for `localhost:3000` (explain what CORS is in a comment).
 
 Handoff Report: tell the human how to start the backend and test each endpoint with `curl`, including uploading a PDF via `curl -F` (explain `-F` and `@`). Verification: upload returns a `review_id` fast, polling reaches `done` with the full report, `app.db` exists and the review survives a server restart, the list endpoint shows it.
+
+> **Project state note after Sub-Phase 2.2 (2026-06-06):**
+> Sub-Phase 2.2 has been implemented with FastAPI review upload/list/detail endpoints, background review execution, CORS for the local Next.js frontend, local SQLite storage for review status/results/issues, and a git-ignored upload folder for private PDFs. Continue future work from Sub-Phase 2.3 — Upload UI & Project Dashboard, after the human confirms backend dependencies are installed and the curl endpoint verification passes.
 
 ---
 
@@ -221,6 +227,9 @@ Build the upload + dashboard UI in `frontend/` with Next.js App Router + Tailwin
 
 Handoff Report: tell the human to create `frontend/.env.local` with `NEXT_PUBLIC_API_BASE` (explain what `.env.local` is), run both servers, and drag in a PDF. Verification: upload works and shows a processing state, finishing navigates onward, the dashboard lists past reviews.
 
+> **Project state note after Sub-Phase 2.3 (2026-06-07):**
+> Sub-Phase 2.3 has been implemented with a typed frontend API client, dashboard upload UI, project type selector, review polling, past-review list, and a minimal `/reviews/[id]` placeholder route. Project type is UI-only for now because the current backend upload endpoint accepts only the PDF. Continue future work from Sub-Phase 2.4 — Compliance Report View, Filtering & Notes, after the human confirms both servers run locally, upload/polling works, completion routes to the placeholder report page, and the dashboard lists past reviews.
+
 ---
 
 ## Sub-Phase 2.4 — Compliance Report View, Filtering & Notes
@@ -235,6 +244,9 @@ Build the report view in `frontend/` on `/reviews/[id]`.
 
 Handoff Report: tell the human to restart the backend (new routes), open a finished review, exercise filters, add a note, and reload to confirm it persisted. Verification: grouped colour-coded issues + working summary bar, filters work, a note survives reload.
 
+> **Project state note after Sub-Phase 2.4 (2026-06-07):**
+> Sub-Phase 2.4 has been implemented with a full `/reviews/[id]` compliance report view, grouped and colour-coded agency issue sections, summary counts, agency/severity filters, expandable suggested resolutions, and persistent per-issue personal notes saved through `PATCH /api/issues/{id}/note`. Existing SQLite databases migrate an `issues.note` column on backend startup, and completed review responses now include issue IDs and notes for the frontend. Continue future work from Sub-Phase 2.5 — PDF Report Export (Phase 2 milestone), after the human confirms backend restart, report filtering, note saving, and note persistence after reload.
+
 ---
 
 ## Sub-Phase 2.5 — PDF Report Export (Phase 2 milestone)
@@ -245,6 +257,9 @@ Add one-click PDF export.
 - An "Export PDF" button on the report page that downloads it.
 
 Handoff Report: tell the human to restart the backend, click Export PDF, and open the file. Verification: PDF opens and is readable with summary + per-agency sections, notes appear, severities/clauses render. **Then instruct the human to make the Phase 2 Git commit.** State the Phase 3 prerequisite: decide whether ICA is needed (only for airport/terminal/checkpoint projects).
+
+> **Project state note after Sub-Phase 2.5 (2026-06-07):**
+> Sub-Phase 2.5 has been implemented with an on-demand ReportLab PDF renderer, `GET /api/reviews/{id}/export.pdf`, and an Export PDF button on completed report pages. Exports include review metadata, summary counts, per-agency issue sections, severities, clause references, descriptions, suggested resolutions, and saved personal notes. Phase 2 is ready for human verification and the Phase 2 Git commit. Continue future work from Phase 3 — Polish, Tune & ICA Extension, after the human confirms PDF export works and decides whether ICA is needed for airport, terminal, or checkpoint projects.
 
 ---
 
