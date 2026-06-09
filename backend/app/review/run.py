@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 from app.review.engine import ReviewEngineError, review_pdf
+from app.review.models import ReviewContext
 
 
 def main() -> None:
@@ -16,7 +17,11 @@ def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(message)s")
 
     try:
-        report = asyncio.run(review_pdf(args.pdf_path))
+        context = ReviewContext(
+            selected_agencies=args.agency,
+            submission_type=args.submission_type,
+        )
+        report = asyncio.run(review_pdf(args.pdf_path, context=context))
     except ReviewEngineError as exc:
         print(f"Review failed: {exc}", file=sys.stderr)
         raise SystemExit(1) from exc
@@ -45,6 +50,18 @@ def _parse_args() -> argparse.Namespace:
         type=Path,
         default=None,
         help="Optional output JSON path. Defaults to a timestamped file beside the PDF.",
+    )
+    parser.add_argument(
+        "--agency",
+        action="append",
+        default=None,
+        help="Agency code to review, such as bca or ura. Repeat for multiple agencies. Defaults to all active agencies.",
+    )
+    parser.add_argument(
+        "--submission-type",
+        choices=["Design", "Authority Submission"],
+        default="Design",
+        help="Drawing submission type. Design mode ignores authority-submission format-only checks.",
     )
     return parser.parse_args()
 

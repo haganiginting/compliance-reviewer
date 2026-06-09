@@ -5,9 +5,14 @@ __pycache__/
 .venv/
 node_modules/
 .next/
+*.tsbuildinfo
 backend/data/chroma/
 backend/data/app.db
 backend/data/uploads/
+backend/data/retrieval_logs/
+backend/data/evals/drawings/
+backend/data/evals/expected_findings.json
+backend/data/evals/results/
 backend/data/source_pdfs/**/*.pdf
 frontend/.env.local
 *_compliance_report_*.json

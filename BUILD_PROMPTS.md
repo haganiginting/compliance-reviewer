@@ -60,7 +60,7 @@ compliance-reviewer/
 │   │   └── ingest.py           # CLI to build the knowledge base
 │   └── data/
 │       ├── source_pdfs/        # the human's downloaded agency PDFs
-│       │   ├── bca/  scdf/  ura/  lta/  nparks/  nea/  pub/  ica/
+│       │   ├── bca/  scdf/  ura/  lta/  nparks/  nea/  pub/
 │       ├── chroma/             # local vector DB (auto-generated)
 │       └── app.db              # SQLite database (auto-generated)
 │
@@ -89,8 +89,8 @@ Set up a brand-new monorepo from scratch (no repo exists yet) named `compliance-
 **Backend:**
 - `requirements.txt` with: `fastapi`, `uvicorn[standard]`, `python-dotenv`, `pydantic`, `pymupdf`, `llama-index`, `chromadb`, `anthropic`, `llama-index-vector-stores-chroma`, `llama-index-embeddings-huggingface`.
 - `main.py`: a minimal FastAPI app exposing `GET /health` → `{"status": "ok"}`.
-- `app/config.py`: loads env vars from the root `.env` via python-dotenv; defines the 8 agencies (BCA, SCDF, URA, LTA, NParks, NEA, PUB, ICA) each with a short description and a `core` boolean (True for BCA/SCDF/URA); defines a single `CLAUDE_MODEL` constant (use a cost-effective model for development).
-- Create the full empty package structure (`app/pdf/`, `app/rag/`, `app/review/`, `app/storage/`, `app/api/`, `scripts/`, and the eight `data/source_pdfs/<agency>/` folders), each Python package with an `__init__.py`.
+- `app/config.py`: loads env vars from the root `.env` via python-dotenv; defines the 7 supported agencies (BCA, SCDF, URA, LTA, NParks, NEA, PUB) each with a short description and a `core` boolean (True for BCA/SCDF/URA); defines a single `CLAUDE_MODEL` constant (use a cost-effective model for development).
+- Create the full empty package structure (`app/pdf/`, `app/rag/`, `app/review/`, `app/storage/`, `app/api/`, `scripts/`, and the seven `data/source_pdfs/<agency>/` folders), each Python package with an `__init__.py`.
 
 **Frontend:**
 - Scaffold a minimal Next.js 14 + TypeScript app (App Router) with Tailwind CSS.
@@ -187,14 +187,14 @@ In your Handoff Report, confirm the human has a valid `ANTHROPIC_API_KEY` (this 
 Extend the knowledge base from 3 to 7 agencies (the ingest code is already generic).
 
 - Confirm ingestion handles `lta`, `nparks`, `nea`, `pub` → collections `sg_lta`, `sg_nparks`, `sg_nea`, `sg_pub`.
-- Update `app/review` to loop over a CONFIGURABLE active-agency list (default: the 7 non-ICA agencies) instead of the hardcoded 3. Keep ICA excluded for now.
+- Update `app/review` to loop over a CONFIGURABLE active-agency list (default: all 7 supported agencies) instead of the hardcoded 3.
 - Drive the active-agency list from `app/config.py` so agencies can be toggled in one place.
 - Update the JSON report + summary to cover all 7.
 
 Handoff Report: tell the human to sort the 4 new agency PDF sets into their folders, run ingestion per agency, and re-run a CLI review. Verification: all 7 collections non-empty, a CLI review returns up to 7 agencies, toggling an agency off in config removes it next run.
 
 > **Project state note after Sub-Phase 2.1 (2026-06-06):**
-> Sub-Phase 2.1 has been implemented with a configurable `ACTIVE_AGENCY_CODES` list in `app/config.py`, default ingestion/review coverage for the 7 non-ICA agencies, and updated CLI wording. ICA remains defined but inactive. Continue future work from Sub-Phase 2.2 — Backend API + SQLite Storage, after the human confirms LTA/NParks/NEA/PUB PDFs have been sorted, ingested, and verified with a 7-agency CLI review.
+> Sub-Phase 2.1 has been implemented with a configurable `ACTIVE_AGENCY_CODES` list in `app/config.py`, default ingestion/review coverage for the 7 supported agencies, and updated CLI wording. Continue future work from Sub-Phase 2.2 — Backend API + SQLite Storage, after the human confirms LTA/NParks/NEA/PUB PDFs have been sorted, ingested, and verified with a 7-agency CLI review.
 
 ---
 
@@ -256,16 +256,16 @@ Add one-click PDF export.
 - Backend-generated for consistency: `GET /api/reviews/{id}/export.pdf` rendering a clean report (filename + date, summary table, then a section per agency listing issues with severity, clause reference, description, resolution, and any personal note). Use reportlab or weasyprint — pick one and explain the tradeoff.
 - An "Export PDF" button on the report page that downloads it.
 
-Handoff Report: tell the human to restart the backend, click Export PDF, and open the file. Verification: PDF opens and is readable with summary + per-agency sections, notes appear, severities/clauses render. **Then instruct the human to make the Phase 2 Git commit.** State the Phase 3 prerequisite: decide whether ICA is needed (only for airport/terminal/checkpoint projects).
+Handoff Report: tell the human to restart the backend, click Export PDF, and open the file. Verification: PDF opens and is readable with summary + per-agency sections, notes appear, severities/clauses render. **Then instruct the human to make the Phase 2 Git commit.** State the Phase 3 prerequisite: collect 1-3 known-answer sample drawings for prompt/retrieval tuning.
 
 > **Project state note after Sub-Phase 2.5 (2026-06-07):**
-> Sub-Phase 2.5 has been implemented with an on-demand ReportLab PDF renderer, `GET /api/reviews/{id}/export.pdf`, and an Export PDF button on completed report pages. Exports include review metadata, summary counts, per-agency issue sections, severities, clause references, descriptions, suggested resolutions, and saved personal notes. Phase 2 is ready for human verification and the Phase 2 Git commit. Continue future work from Phase 3 — Polish, Tune & ICA Extension, after the human confirms PDF export works and decides whether ICA is needed for airport, terminal, or checkpoint projects.
+> Sub-Phase 2.5 has been implemented with an on-demand ReportLab PDF renderer, `GET /api/reviews/{id}/export.pdf`, and an Export PDF button on completed report pages. Exports include review metadata, summary counts, per-agency issue sections, severities, clause references, descriptions, suggested resolutions, and saved personal notes. Phase 2 is ready for human verification and the Phase 2 Git commit. Continue future work from Phase 3 — Polish, Tune & Conflict Detection, after the human confirms PDF export works and has 1-3 known-answer sample drawings ready for tuning.
 
 ---
 
-# PHASE 3 — Polish, Tune & ICA Extension
+# PHASE 3 — Polish, Tune, Large Sets & Conflict Detection
 
-**Goal:** accurate and smooth enough for a real project; ICA available on demand. Split into 4 sub-phases.
+**Goal:** accurate and smooth enough for a real project using the 7 supported agencies, including realistic multi-page drawing sets. Split into 5 sub-phases.
 
 ---
 
@@ -280,35 +280,97 @@ Improve accuracy, no new features.
 
 Handoff Report: tell the human to add 1–3 drawings they know the answers for, fill in the expected-findings file, and run the harness. Verification: harness reports caught/missed, changing `top_k`/chunk size measurably changes retrieval, logs show the clauses behind each flag.
 
+> **Project state note after Sub-Phase 3.1 (2026-06-07):**
+> Sub-Phase 3.1 has been implemented with configurable chunk size, overlap, and per-agency retrieval `top_k`; editable base and per-agency prompt files; structured retrieval trace logs under `backend/data/retrieval_logs/`; and a JSON eval harness at `python scripts/evaluate.py` using private known-answer files under `backend/data/evals/`. During eval, a realistic multi-page drawing set hit the current single-request image payload limit, so the next implementation work should start from Sub-Phase 3.2 — Large Drawing Set Handling & Upload Context, after the human confirms the eval harness runs on 1-3 known-answer drawings and retrieval logs show the clauses behind each review.
+
 ---
 
-## Sub-Phase 3.2 — Inline PDF Viewer
+## Sub-Phase 3.2 — Large Drawing Set Handling & Upload Context
 
-Add an inline viewer on the report page.
+Support realistic multi-page drawing sets without sending every rendered page image in one Claude request.
 
+- Add frontend upload context fields: drawing type (Floor Plan / Site Plan / Section & Elevation / Drainage / Fire Safety / Mixed Set), a short user description, and optional review notes.
+- Extend the backend upload API and SQLite storage to persist drawing type, description, and notes with each review.
+- Update the review engine to process large PDFs in page/agency batches instead of one all-pages request per agency.
+- Build a lightweight page inventory from parsed text, labels, annotations, and the user description so each agency review sends only the most relevant page images for that batch.
+- Add image budget controls in config: max image payload per Claude request, max images per batch, and a fallback to lower-DPI/compressed page images when needed.
+- Keep the final report shape the same by merging batch findings into one agency report, deduplicating near-identical findings, and rebuilding the summary.
+- Add clearer review progress/status messaging for long reviews (for example: parsing PDF, reviewing URA pages 1-4, combining findings).
+- Ensure eval harness and API reviews both use the same large-PDF batching path.
+
+Handoff Report: tell the human to restart both servers, upload a larger multi-page drawing set, fill in the drawing type/description fields, and run the eval harness again on the previously failing sample. Verification: the large PDF no longer fails with the PNG payload-size error, logs show page/agency batches, the final report still has the same agency/issue/summary shape, and changing the description can influence page selection/retrieval without inventing unsupported findings.
+
+> **Project state note after Sub-Phase 3.2 (2026-06-07):**
+> Sub-Phase 3.2 has been implemented with upload context fields for drawing type, description, and review notes; SQLite storage/migration for review context and live status messages; batched page/agency review handling with per-request image budgets and lower-DPI PNG fallback; batch-aware retrieval trace logs; merged/deduplicated agency findings that preserve the existing report shape; and frontend progress messaging driven by backend status. Continue future work from Sub-Phase 3.3 — Review Scope Controls & Inline PDF Viewer, after the human confirms a larger multi-page drawing set no longer fails with the single-request PNG payload-size error and the eval harness uses the batched path.
+
+---
+
+## Sub-Phase 3.3 — Review Scope Controls & Inline PDF Viewer
+
+Add review scope controls to reduce waiting time/token cost, improve prompt accuracy by submission stage, and add an inline viewer on the report page.
+
+- Before upload, require the user to choose which agencies to review against (BCA / SCDF / URA / LTA / NParks / NEA / PUB), defaulting to all active agencies but allowing one or many. Persist the selected agencies with the review and use them in API reviews, CLI/eval reviews where applicable, summaries, reports, logs, and PDF export.
+- Before upload, require the user to choose drawing submission type: Design / Authority Submission. Persist this with each review.
+- Update backend review context, prompts, and Claude user instructions so Design drawings still receive design-compliance checks but ignore authority-submission drawing-format requirements such as missing north arrow, missing scale bar, title-block/submission completeness, and other authority-documentation-only items unless the selected submission type is Authority Submission.
+- Keep authority/submission drawing requirements active when the selected submission type is Authority Submission.
+- Update frontend dashboard upload UI, typed API client, SQLite storage, list/detail responses, report metadata, and export metadata for selected agencies and submission type.
+- Make review progress/status messages reflect the selected agency list so the user understands why a shorter review is faster.
 - Serve the original PDF from the backend: `GET /api/reviews/{id}/file`.
-- Embed a viewer (react-pdf or pdf.js) in a split-pane layout: report one side, drawing the other.
+- Embed a viewer in a split-pane layout: report one side, drawing the other.
 - Clicking an issue with a drawing_location/page jumps the viewer to that page.
-- Explain any new dependency.
+- Explain the viewer choice and whether it adds any new dependency.
 
-Handoff Report: tell the human to restart both servers, open a report, and click an issue. Verification: the drawing renders in the split pane, clicking an issue navigates to the cited page.
+Handoff Report: tell the human to restart both servers, run one review against a single agency, run one review against multiple agencies, compare time/token behavior, test both Design and Authority Submission modes on the same drawing, then open a report and click an issue. Verification: selected agencies are the only agencies reviewed and displayed, Design mode suppresses authority-submission drawing-format findings while keeping design-compliance findings, Authority Submission mode can still flag drawing-format/submission-completeness issues, the drawing renders in the split pane, and clicking an issue navigates to the cited page.
 
----
-
-## Sub-Phase 3.3 — ICA Module (Conditional)
-
-Add ICA as an OPTIONAL 8th agency, active only for infrastructure projects.
-
-- Add `sg_ica` ingestion support (same generic pipeline; PDFs in `data/source_pdfs/ica/`).
-- Add a project-type concept: when the user selects "Infrastructure (airport / terminal / checkpoint)" at upload, ICA is included; otherwise excluded.
-- Surface ICA issues in report and export, colour-coded.
-- Handle gracefully an empty ICA collection (some ICA standards aren't public): show a clear "ICA knowledge base not loaded" notice instead of failing.
-
-Handoff Report: tell the human (if they have ICA PDFs) to place them and ingest, then upload with project type "Infrastructure". Verification: Infrastructure includes ICA, other types exclude it, empty ICA collection shows a notice rather than crashing.
+> **Project state note after Sub-Phase 3.3 (2026-06-09):**
+> Sub-Phase 3.3 has been implemented with pre-upload agency scope controls, Design/Authority Submission selection, persisted review scope metadata, scoped API/CLI/eval reviews, submission-aware prompt guidance, stored drawing page numbers, inline original-PDF serving at `GET /api/reviews/{id}/file`, ReportLab export metadata, and a split-pane browser-native PDF iframe layout with issue-to-page navigation. The first React PDF Viewer implementation was replaced with the native iframe viewer after local rendering showed a blank PDF pane, so there is no added PDF viewer dependency. Continue future work from Sub-Phase 3.4 — PDF Issue Markup & Strict Drawing-Scope Review, after the human confirms single-agency and multi-agency reviews, Design versus Authority Submission behavior, the inline PDF viewer, and issue page jumps all work locally.
 
 ---
 
-## Sub-Phase 3.4 — Cross-Agency Conflict Detection (final milestone)
+## Sub-Phase 3.4 — PDF Issue Markup & Strict Drawing-Scope Review
+
+Add visible issue markup to the PDF viewer and tighten review behavior so Claude only comments on the uploaded drawing evidence and selected review scope.
+
+- Replace or augment the current native iframe PDF viewer with a controllable page-image viewer using backend-rendered PDF page images, for example `GET /api/reviews/{id}/pages/{page_number}.png`. The viewer must still work locally and must not expose private PDFs outside the local backend.
+- Add dynamic issue markup overlays on the displayed page. Use reliable numbered markers as the first milestone, not fake exact bounding boxes. Each marker should correlate to one issue/comment, show severity colour and agency label, and appear only on the cited page.
+- Link report cards and PDF markers both ways: clicking an issue jumps to the right page and highlights the matching marker; clicking a marker scrolls or selects the matching issue card.
+- Extend issue data where useful with optional markup metadata in review responses, SQLite storage/hydration, frontend types, and PDF export. Keep fallback behavior when only `drawing_page_number` or parseable `drawing_location` exists. Suggested optional fields: `page_number`, `marker_label`, `severity`, `agency`, and optional normalized marker position.
+- Keep the existing issue-to-page jump behavior as a fallback for older reviews and issues that do not have full markup metadata.
+- Tighten the base system prompt and per-request user instructions with a hard "uploaded drawing evidence only" rule: review only the pages, labels, text, and images actually uploaded for this review, plus the selected agencies, drawing type, submission type, description, and review notes.
+- Do not flag missing specifications, forms, schedules, reports, calculations, material specs, title blocks, signatures, complete drawing sets, or authority-submission documentation unless those materials are actually uploaded and the selected submission type makes those checks in scope.
+- Treat drawing type and submission type as hard scope controls. If the user uploads a single-page Floor Plan in Design mode for SCDF, the review should only make SCDF design-compliance comments that can be assessed from that floor plan and directly supported by retrieved clauses.
+- Keep Authority Submission requirements active only when submission type is Authority Submission and the uploaded evidence supports that review.
+
+Handoff Report: tell the human to restart both servers, open a completed report, click issue cards and PDF markers in both directions, then run the known one-page SCDF Floor Plan test in Design mode. Verification: markers appear only on the cited pages, clicking an issue highlights the matching marker, clicking a marker selects or scrolls to the matching issue, older reviews still jump by page when marker metadata is missing, and the SCDF-only Design-mode floor plan review does not produce Authority Submission findings or comments about non-uploaded specifications/documents.
+
+> **Project state note after Sub-Phase 3.4 (2026-06-09):**
+> Sub-Phase 3.4 has been implemented with backend-rendered review page PNGs at `GET /api/reviews/{id}/pages/{page_number}.png`, deterministic issue marker metadata stored and hydrated through SQLite, a split-pane page-image viewer with issue/marker two-way selection, marker metadata in PDF exports, and stricter uploaded-evidence-only review prompt guidance. Continue future work from corrective Sub-Phase 3.4a — Drawing Understanding Gate, after the human confirms marker navigation, older-review page fallback, and the SCDF-only Design-mode floor plan scope test.
+
+---
+
+## Sub-Phase 3.4a — Drawing Understanding Gate
+
+Add a pre-review drawing understanding gate so Claude reviews a confirmed page/view inventory before compliance findings are generated.
+
+- Store `inventory_status`, `drawing_inventory_json`, and confirmation metadata with each review.
+- Build a per-page drawing inventory with page number, sheet title, drawing number, primary view type, detected view types, confidence, evidence labels, and warnings.
+- Classify pages using deterministic text/label heuristics first, then Claude vision with 150 DPI page images and higher-detail crops for uncertain pages.
+- Pause reviews when any page is low-confidence or `Unknown`; let the frontend show thumbnails and editable view-type controls before the compliance review starts.
+- Auto-confirm high-confidence inventories and continue into the existing compliance review path.
+- Pass the confirmed drawing inventory into every Claude review batch.
+- Add `drawing_view_type` to issue data and reject/retry findings that conflict with confirmed page view types, such as calling a confirmed section page a floor plan.
+- Keep the existing report shape otherwise, including markers, notes, export, and selected-agency behavior.
+- Fix review image selection so 150 DPI page images are preferred when they fit the request budget, with lower DPI fallback only when needed.
+- Extend eval results with forbidden wording checks for drawing-type regressions.
+
+Handoff Report: tell the human to restart both servers, upload the drawing set that produced the section/floor-plan confusion, correct any uncertain page labels, confirm the drawing check, and rerun the SCDF review. Verification: page 9 is classified as `Section`, low-confidence pages pause before review, confirmed high-confidence pages can auto-run, issue cards/export show drawing view type, and SCDF findings on section pages no longer call them floor plans.
+
+> **Project state note after Sub-Phase 3.4a (2026-06-09):**
+> Sub-Phase 3.4a has been implemented with a drawing inventory gate, SQLite inventory storage/migration, inventory confirmation API endpoints, frontend drawing-check screen, confirmed-inventory prompt guidance, `drawing_view_type` issue metadata, drawing-view consistency retry/drop logic, 150 DPI-first review image selection, classifier unit tests, and eval forbidden-phrase checks. Continue future work from Sub-Phase 3.5 — Cross-Agency Conflict Detection (final milestone), after the human confirms the screenshot regression no longer occurs and the drawing-check gate behaves correctly on low-confidence pages.
+
+---
+
+## Sub-Phase 3.5 — Cross-Agency Conflict Detection (final milestone)
 
 Add conflict detection as the final polish.
 
@@ -317,7 +379,7 @@ Add conflict detection as the final polish.
 - Show conflicts in a distinct highlighted section at the top of the report and include them in the PDF export.
 - Explain the extra API cost and let it be disabled via config.
 
-Handoff Report: tell the human to restart both servers and run a review on a drawing likely to have overlapping requirements. Verification: conflicts section appears when relevant, conflicts are in the export, detection can be toggled off. **Then instruct the human to make the final Git commit.** Confirm the project is complete.
+Handoff Report: tell the human to restart both servers and run a review on a drawing likely to have overlapping requirements. Verification: conflicts section appears when relevant, conflicts are in the export, detection can be toggled off. **Then instruct the human to make the final Git commit after Sub-Phase 3.5.** Confirm the project is complete.
 
 ---
 

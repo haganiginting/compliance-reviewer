@@ -54,7 +54,7 @@ Never assume the human knows virtual environments, Node, npm, CORS, Git, or API 
 - Backend: FastAPI Python app in `backend/`.
 - Frontend: Next.js + TypeScript app in `frontend/`.
 - Generated and private backend data belongs under `backend/data/`.
-- Agency PDF folders use lowercase agency codes: `bca`, `scdf`, `ura`, `lta`, `nparks`, `nea`, `pub`, `ica`.
+- Agency PDF folders use lowercase agency codes: `bca`, `scdf`, `ura`, `lta`, `nparks`, `nea`, `pub`.
 - `BUILD_PROMPTS.md` owns the phase details, acceptance criteria, and progress notes.
 
 ## Handoff Report Format

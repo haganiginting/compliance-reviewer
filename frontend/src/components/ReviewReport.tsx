@@ -4,12 +4,19 @@ import Link from "next/link";
 import type { ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  confirmReviewInventory,
+  getReviewFileUrl,
   getReviewExportUrl,
   getReview,
+  getReviewPageImageUrl,
   updateIssueNote,
+  type AgencyCode,
   type AgencyReview,
   type ComplianceIssue,
   type ComplianceReport,
+  type DrawingInventory,
+  type DrawingInventoryItem,
+  type DrawingViewType,
   type ReviewDetail,
   type ReviewStatus,
   type Severity
@@ -22,8 +29,34 @@ type ReviewReportProps = {
 type AgencyFilter = "all" | string;
 type SeverityFilter = "all" | Severity;
 type NoteState = "idle" | "saving" | "saved" | "error";
+type InventorySaveState = "idle" | "saving" | "error";
+type IssueSelectionRequest = {
+  issueId: string;
+  pageNumber: number;
+  requestId: number;
+};
 
 const SEVERITIES: Severity[] = ["Critical", "Major", "Advisory"];
+const DRAWING_VIEW_TYPES: DrawingViewType[] = [
+  "Floor Plan",
+  "Site Plan",
+  "Section",
+  "Elevation",
+  "Section & Elevation",
+  "Detail",
+  "Schedule/General",
+  "Unknown"
+];
+
+const AGENCIES: { code: AgencyCode; name: string }[] = [
+  { code: "bca", name: "BCA" },
+  { code: "scdf", name: "SCDF" },
+  { code: "ura", name: "URA" },
+  { code: "lta", name: "LTA" },
+  { code: "nparks", name: "NParks" },
+  { code: "nea", name: "NEA" },
+  { code: "pub", name: "PUB" }
+];
 
 const AGENCY_PALETTE: Record<
   string,
@@ -97,6 +130,8 @@ export function ReviewReport({ reviewId }: ReviewReportProps) {
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [noteStates, setNoteStates] = useState<Record<string, NoteState>>({});
   const [noteErrors, setNoteErrors] = useState<Record<string, string>>({});
+  const [selectedIssueId, setSelectedIssueId] = useState<string | null>(null);
+  const [issueSelectionRequest, setIssueSelectionRequest] = useState<IssueSelectionRequest | null>(null);
 
   const loadReview = useCallback(async () => {
     setLoading(true);
@@ -200,6 +235,20 @@ export function ReviewReport({ reviewId }: ReviewReportProps) {
     setNoteErrors((current) => ({ ...current, [issueId]: "" }));
   };
 
+  const handleIssueSelect = (issue: ComplianceIssue) => {
+    const pageNumber = pageNumberForIssue(issue);
+    setSelectedIssueId(issue.id);
+    if (!pageNumber) {
+      return;
+    }
+
+    setIssueSelectionRequest({
+      issueId: issue.id,
+      pageNumber,
+      requestId: Date.now()
+    });
+  };
+
   return (
     <main className="min-h-screen bg-neutral-100 px-5 py-6 text-neutral-950 sm:px-8 lg:px-10">
       <div className="mx-auto w-full max-w-7xl">
@@ -236,9 +285,12 @@ export function ReviewReport({ reviewId }: ReviewReportProps) {
                 handleNoteDraftChange(issueId, value)
               }
               onRefresh={() => void loadReview()}
+              onSelectIssue={handleIssueSelect}
               onSaveNote={handleSaveNote}
               onSeverityFilterChange={setSeverityFilter}
+              issueSelectionRequest={issueSelectionRequest}
               review={review}
+              selectedIssueId={selectedIssueId}
               severityFilter={severityFilter}
               visibleAgencies={visibleAgencies}
               visibleIssueCount={visibleIssueCount}
@@ -259,9 +311,12 @@ function ReportBody({
   onClearNote,
   onNoteDraftChange,
   onRefresh,
+  onSelectIssue,
   onSaveNote,
   onSeverityFilterChange,
+  issueSelectionRequest,
   review,
+  selectedIssueId,
   severityFilter,
   visibleAgencies,
   visibleIssueCount
@@ -274,18 +329,31 @@ function ReportBody({
   onClearNote: (issue: ComplianceIssue) => void;
   onNoteDraftChange: (issueId: string, value: string) => void;
   onRefresh: () => void;
+  onSelectIssue: (issue: ComplianceIssue) => void;
   onSaveNote: (issue: ComplianceIssue) => void;
   onSeverityFilterChange: (severity: SeverityFilter) => void;
+  issueSelectionRequest: IssueSelectionRequest | null;
   review: ReviewDetail;
+  selectedIssueId: string | null;
   severityFilter: SeverityFilter;
   visibleAgencies: AgencyReview[];
   visibleIssueCount: number;
 }) {
+  if (review.inventory_status === "needs_confirmation" && review.drawing_inventory) {
+    return (
+      <DrawingInventoryGate
+        inventory={review.drawing_inventory}
+        onConfirmed={onRefresh}
+        review={review}
+      />
+    );
+  }
+
   if (review.status === "processing") {
     return (
       <StateMessage
         title="Review still processing"
-        body="The backend is still reviewing this PDF. Refresh this page in a moment."
+        body={review.status_message || "The backend is still reviewing this PDF. Refresh this page in a moment."}
         actionLabel="Refresh"
         onAction={onRefresh}
       />
@@ -316,39 +384,415 @@ function ReportBody({
   }
 
   return (
-    <div>
-      <ReportHeader review={review} report={review.report} />
-      <SummaryBar report={review.report} />
-      <Filters
-        agencyFilter={agencyFilter}
-        onAgencyFilterChange={onAgencyFilterChange}
-        onSeverityFilterChange={onSeverityFilterChange}
-        report={review.report}
-        severityFilter={severityFilter}
-        visibleIssueCount={visibleIssueCount}
-      />
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1.05fr)_minmax(360px,0.95fr)]">
+      <div className="min-w-0">
+        <ReportHeader review={review} report={review.report} />
+        <SummaryBar report={review.report} />
+        <Filters
+          agencyFilter={agencyFilter}
+          onAgencyFilterChange={onAgencyFilterChange}
+          onSeverityFilterChange={onSeverityFilterChange}
+          report={review.report}
+          severityFilter={severityFilter}
+          visibleIssueCount={visibleIssueCount}
+        />
 
-      {visibleIssueCount === 0 ? (
-        <div className="mt-6 border border-neutral-200 bg-neutral-50 px-4 py-8 text-sm text-neutral-600">
-          No issues match the current filters.
+        {visibleIssueCount === 0 ? (
+          <div className="mt-6 border border-neutral-200 bg-neutral-50 px-4 py-8 text-sm text-neutral-600">
+            No issues match the current filters.
+          </div>
+        ) : (
+          <div className="mt-6 space-y-6">
+            {visibleAgencies.map((agency) => (
+              <AgencySection
+                agency={agency}
+                key={agency.agency}
+                noteDrafts={noteDrafts}
+                noteErrors={noteErrors}
+                noteStates={noteStates}
+                onClearNote={onClearNote}
+                onNoteDraftChange={onNoteDraftChange}
+                onSelectIssue={onSelectIssue}
+                onSaveNote={onSaveNote}
+                selectedIssueId={selectedIssueId}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+
+      <PageImageViewer
+        issues={flattenIssues(visibleAgencies)}
+        onSelectIssue={onSelectIssue}
+        pageCount={review.report.document.page_count}
+        issueSelectionRequest={issueSelectionRequest}
+        selectedIssueId={selectedIssueId}
+        reviewId={review.id}
+      />
+    </div>
+  );
+}
+
+function DrawingInventoryGate({
+  inventory,
+  onConfirmed,
+  review
+}: {
+  inventory: DrawingInventory;
+  onConfirmed: () => void;
+  review: ReviewDetail;
+}) {
+  const [draftInventory, setDraftInventory] = useState<DrawingInventory>(inventory);
+  const [saveState, setSaveState] = useState<InventorySaveState>("idle");
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setDraftInventory(inventory);
+  }, [inventory]);
+
+  const updatePage = (pageNumber: number, updates: Partial<DrawingInventoryItem>) => {
+    setDraftInventory((current) => ({
+      pages: current.pages.map((page) =>
+        page.page_number === pageNumber ? { ...page, ...updates } : page
+      )
+    }));
+  };
+
+  const handleConfirm = async () => {
+    setSaveState("saving");
+    setSaveError(null);
+
+    try {
+      await confirmReviewInventory(review.id, draftInventory);
+      onConfirmed();
+      setSaveState("idle");
+    } catch (error) {
+      setSaveState("error");
+      setSaveError(
+        error instanceof Error
+          ? error.message
+          : "Could not confirm this drawing check."
+      );
+    }
+  };
+
+  const uncertainCount = draftInventory.pages.filter((page) => page.primary_view_type === "Unknown").length;
+
+  return (
+    <div>
+      <header className="border-b border-neutral-200 pb-5">
+        <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+          Drawing check
+        </p>
+        <h1 className="mt-2 text-2xl font-semibold text-neutral-950 sm:text-3xl">
+          Confirm drawing view types
+        </h1>
+        <dl className="mt-3 grid gap-2 text-sm text-neutral-600 sm:grid-cols-3 xl:grid-cols-5">
+          <InfoTerm label="File" value={review.filename} />
+          <InfoTerm label="Submission" value={review.submission_type} />
+          <InfoTerm label="Drawing type" value={review.drawing_type} />
+          <InfoTerm label="Agencies" value={formatAgencyCodes(review.selected_agencies)} />
+          <InfoTerm label="Pages" value={draftInventory.pages.length} />
+        </dl>
+      </header>
+
+      <div className="mt-5 border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+        <p className="font-semibold">
+          {uncertainCount > 0
+            ? `${uncertainCount} page${uncertainCount === 1 ? "" : "s"} still marked Unknown.`
+            : "Review the detected labels, then confirm to run compliance review."}
+        </p>
+      </div>
+
+      <div className="mt-5 grid gap-4 lg:grid-cols-2">
+        {draftInventory.pages.map((page) => (
+          <DrawingInventoryPageCard
+            key={page.page_number}
+            onUpdate={(updates) => updatePage(page.page_number, updates)}
+            page={page}
+            reviewId={review.id}
+          />
+        ))}
+      </div>
+
+      {saveState === "error" ? (
+        <p className="mt-4 border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+          {saveError || "Could not confirm this drawing check."}
+        </p>
+      ) : null}
+
+      <div className="mt-5 flex flex-col gap-3 border-t border-neutral-200 pt-5 sm:flex-row sm:items-center sm:justify-between">
+        <p className="text-sm text-neutral-600">
+          Confirmation will start the compliance review in the local backend.
+        </p>
+        <button
+          className="border border-teal-700 bg-teal-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:border-neutral-300 disabled:bg-neutral-300 disabled:text-neutral-600"
+          disabled={saveState === "saving"}
+          onClick={handleConfirm}
+          type="button"
+        >
+          {saveState === "saving" ? "Starting review..." : "Confirm and run review"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function DrawingInventoryPageCard({
+  onUpdate,
+  page,
+  reviewId
+}: {
+  onUpdate: (updates: Partial<DrawingInventoryItem>) => void;
+  page: DrawingInventoryItem;
+  reviewId: string;
+}) {
+  const confidenceLabel = `${Math.round(page.confidence * 100)}%`;
+  const confidenceTone =
+    page.confidence >= 0.86
+      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+      : page.confidence >= 0.7
+        ? "border-amber-200 bg-amber-50 text-amber-900"
+        : "border-red-200 bg-red-50 text-red-800";
+
+  return (
+    <article className="grid gap-4 border border-neutral-200 bg-white p-4 shadow-sm sm:grid-cols-[150px_minmax(0,1fr)]">
+      <div className="min-w-0">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          alt={`Drawing page ${page.page_number}`}
+          className="h-48 w-full border border-neutral-200 object-contain"
+          src={getReviewPageImageUrl(reviewId, page.page_number)}
+        />
+      </div>
+      <div className="min-w-0">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h2 className="text-base font-semibold text-neutral-950">
+              Page {page.page_number}
+            </h2>
+            <p className="mt-1 text-sm text-neutral-600">
+              {page.sheet_title || "No sheet title detected"}
+            </p>
+            {page.drawing_number ? (
+              <p className="mt-1 font-mono text-xs text-neutral-500">
+                {page.drawing_number}
+              </p>
+            ) : null}
+          </div>
+          <span className={`w-fit border px-2 py-1 text-xs font-semibold ${confidenceTone}`}>
+            {confidenceLabel}
+          </span>
         </div>
-      ) : (
-        <div className="mt-6 space-y-6">
-          {visibleAgencies.map((agency) => (
-            <AgencySection
-              agency={agency}
-              key={agency.agency}
-              noteDrafts={noteDrafts}
-              noteErrors={noteErrors}
-              noteStates={noteStates}
-              onClearNote={onClearNote}
-              onNoteDraftChange={onNoteDraftChange}
-              onSaveNote={onSaveNote}
-            />
+
+        <label className="mt-4 block">
+          <span className="text-sm font-semibold text-neutral-800">View type</span>
+          <select
+            className="mt-2 w-full border border-neutral-300 bg-white px-3 py-2 text-sm text-neutral-900 outline-none transition focus:border-teal-700"
+            onChange={(event) =>
+              onUpdate({
+                confidence: 1,
+                primary_view_type: event.target.value as DrawingViewType,
+                detected_view_types: [event.target.value as DrawingViewType],
+                warnings: page.warnings.filter((warning) => !warning.toLowerCase().includes("confirm"))
+              })
+            }
+            value={page.primary_view_type}
+          >
+            {DRAWING_VIEW_TYPES.map((viewType) => (
+              <option key={viewType} value={viewType}>
+                {viewType}
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <div className="mt-4 flex flex-wrap gap-2">
+          {(page.detected_view_types.length ? page.detected_view_types : [page.primary_view_type]).map((viewType) => (
+            <span
+              className="border border-neutral-200 bg-neutral-50 px-2 py-1 text-xs font-medium text-neutral-700"
+              key={viewType}
+            >
+              {viewType}
+            </span>
           ))}
         </div>
-      )}
-    </div>
+
+        {page.evidence_labels.length > 0 ? (
+          <div className="mt-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+              Evidence
+            </p>
+            <ul className="mt-2 space-y-1 text-sm text-neutral-700">
+              {page.evidence_labels.slice(0, 4).map((label) => (
+                <li className="break-words" key={label}>
+                  {label}
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+
+        {page.warnings.length > 0 ? (
+          <div className="mt-4 flex flex-wrap gap-2">
+            {page.warnings.map((warning) => (
+              <span
+                className="border border-amber-200 bg-amber-50 px-2 py-1 text-xs font-medium text-amber-900"
+                key={warning}
+              >
+                {warning}
+              </span>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </article>
+  );
+}
+
+function PageImageViewer({
+  issues,
+  issueSelectionRequest,
+  onSelectIssue,
+  pageCount,
+  selectedIssueId,
+  reviewId
+}: {
+  issues: ComplianceIssue[];
+  issueSelectionRequest: IssueSelectionRequest | null;
+  onSelectIssue: (issue: ComplianceIssue) => void;
+  pageCount: number;
+  selectedIssueId: string | null;
+  reviewId: string;
+}) {
+  const fileUrl = getReviewFileUrl(reviewId);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [imageError, setImageError] = useState(false);
+
+  useEffect(() => {
+    if (!issueSelectionRequest) {
+      return;
+    }
+    setCurrentPage(clampPage(issueSelectionRequest.pageNumber, pageCount));
+    window.requestAnimationFrame(() => {
+      document
+        .getElementById(issueElementId(issueSelectionRequest.issueId))
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }, [issueSelectionRequest, pageCount]);
+
+  useEffect(() => {
+    setImageError(false);
+  }, [currentPage, reviewId]);
+
+  const pageImageUrl = getReviewPageImageUrl(reviewId, currentPage);
+  const originalPdfUrl = `${fileUrl}#page=${currentPage}&view=FitH`;
+  const currentPageMarkers = issues
+    .map((issue) => ({ issue, markup: markupForIssue(issue) }))
+    .filter(({ markup }) => markup?.page_number === currentPage);
+
+  return (
+    <aside className="min-w-0 xl:sticky xl:top-5 xl:self-start">
+      <div className="border border-neutral-300 bg-neutral-50">
+        <div className="flex flex-col gap-3 border-b border-neutral-300 bg-white px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-semibold text-neutral-950">Drawing PDF</h2>
+            <p className="mt-1 text-xs text-neutral-600">
+              Page {currentPage} of {pageCount}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              className="border border-neutral-300 bg-white px-3 py-2 text-sm font-medium text-neutral-800 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400"
+              disabled={currentPage <= 1}
+              onClick={() => setCurrentPage((page) => clampPage(page - 1, pageCount))}
+              type="button"
+            >
+              Previous
+            </button>
+            <button
+              className="border border-neutral-300 bg-white px-3 py-2 text-sm font-medium text-neutral-800 transition hover:border-neutral-500 disabled:cursor-not-allowed disabled:bg-neutral-100 disabled:text-neutral-400"
+              disabled={currentPage >= pageCount}
+              onClick={() => setCurrentPage((page) => clampPage(page + 1, pageCount))}
+              type="button"
+            >
+              Next
+            </button>
+            <a
+              className="border border-teal-700 bg-teal-700 px-3 py-2 text-sm font-semibold text-white transition hover:bg-teal-800"
+              href={originalPdfUrl}
+              rel="noreferrer"
+              target="_blank"
+            >
+              Open original PDF
+            </a>
+          </div>
+        </div>
+        <div className="h-[72vh] min-h-[520px] overflow-auto bg-neutral-200 p-3">
+          <div className="relative mx-auto w-fit min-w-[320px] bg-white shadow-sm">
+            {imageError ? (
+              <div className="flex h-[520px] w-full min-w-[320px] items-center justify-center border border-neutral-300 bg-white px-5 text-center text-sm text-neutral-600">
+                This page image could not be loaded. Open the original PDF to inspect the drawing.
+              </div>
+            ) : (
+              // The review page image is generated dynamically by the local FastAPI backend.
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                alt={`Drawing page ${currentPage}`}
+                className="block max-h-none max-w-full select-none"
+                onError={() => setImageError(true)}
+                src={pageImageUrl}
+              />
+            )}
+
+            {!imageError
+              ? currentPageMarkers.map(({ issue, markup }) =>
+                  markup ? (
+                    <button
+                      aria-label={`Select issue ${markup.marker_label}`}
+                      className={`absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 px-2 py-1 text-xs font-bold shadow-sm transition focus:outline-none focus:ring-2 focus:ring-teal-600 ${
+                        markerClass(issue.severity, selectedIssueId === issue.id)
+                      }`}
+                      key={issue.id}
+                      onClick={() => onSelectIssue(issue)}
+                      style={{
+                        left: `${markup.marker_x * 100}%`,
+                        top: `${markup.marker_y * 100}%`
+                      }}
+                      type="button"
+                    >
+                      <span className="block text-[10px] leading-none">{agencyForIssueLabel(markup.marker_label)}</span>
+                      <span className="block leading-tight">{markup.marker_label}</span>
+                    </button>
+                  ) : null
+                )
+              : null}
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {currentPageMarkers.length > 0 ? (
+              currentPageMarkers.map(({ issue, markup }) =>
+                markup ? (
+                  <button
+                    className={`border px-2.5 py-1.5 text-xs font-semibold transition ${
+                      selectedIssueId === issue.id
+                        ? "border-teal-700 bg-teal-700 text-white"
+                        : "border-neutral-300 bg-white text-neutral-700 hover:border-neutral-500"
+                    }`}
+                    key={`legend-${issue.id}`}
+                    onClick={() => onSelectIssue(issue)}
+                    type="button"
+                  >
+                    {markup.marker_label} · {issue.severity}
+                  </button>
+                ) : null
+              )
+            ) : (
+              <p className="text-xs text-neutral-600">No visible issue markers on this page.</p>
+            )}
+          </div>
+        </div>
+      </div>
+    </aside>
   );
 }
 
@@ -368,14 +812,22 @@ function ReportHeader({
         <h1 className="mt-2 text-2xl font-semibold text-neutral-950 sm:text-3xl">
           {review.filename}
         </h1>
-        <dl className="mt-3 grid gap-2 text-sm text-neutral-600 sm:grid-cols-3">
+        <dl className="mt-3 grid gap-2 text-sm text-neutral-600 sm:grid-cols-3 xl:grid-cols-6">
           <InfoTerm label="Status" value={<StatusBadge status={review.status} />} />
+          <InfoTerm label="Submission" value={review.submission_type} />
+          <InfoTerm label="Drawing type" value={review.drawing_type} />
+          <InfoTerm label="Agencies" value={formatAgencyCodes(review.selected_agencies)} />
           <InfoTerm label="Created" value={formatDate(review.created_at)} />
           <InfoTerm
             label="Reviewed"
             value={formatDate(report.reviewed_at || review.updated_at)}
           />
         </dl>
+        {review.description ? (
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-neutral-600">
+            {review.description}
+          </p>
+        ) : null}
       </div>
       <div className="flex flex-col gap-3 sm:flex-row lg:flex-col lg:items-stretch">
         <div className="border border-neutral-300 bg-neutral-50 px-4 py-3 text-sm">
@@ -519,7 +971,9 @@ function AgencySection({
   noteStates,
   onClearNote,
   onNoteDraftChange,
-  onSaveNote
+  onSelectIssue,
+  onSaveNote,
+  selectedIssueId
 }: {
   agency: AgencyReview;
   noteDrafts: Record<string, string>;
@@ -527,7 +981,9 @@ function AgencySection({
   noteStates: Record<string, NoteState>;
   onClearNote: (issue: ComplianceIssue) => void;
   onNoteDraftChange: (issueId: string, value: string) => void;
+  onSelectIssue: (issue: ComplianceIssue) => void;
   onSaveNote: (issue: ComplianceIssue) => void;
+  selectedIssueId: string | null;
 }) {
   const style = agencyStyle(agency.agency);
 
@@ -553,7 +1009,9 @@ function AgencySection({
             noteState={noteStates[issue.id] ?? "idle"}
             onClearNote={onClearNote}
             onNoteDraftChange={onNoteDraftChange}
+            onSelectIssue={onSelectIssue}
             onSaveNote={onSaveNote}
+            selected={selectedIssueId === issue.id}
           />
         ))}
       </div>
@@ -569,7 +1027,9 @@ function IssueCard({
   noteState,
   onClearNote,
   onNoteDraftChange,
-  onSaveNote
+  onSelectIssue,
+  onSaveNote,
+  selected
 }: {
   agency: string;
   issue: ComplianceIssue;
@@ -578,15 +1038,27 @@ function IssueCard({
   noteState: NoteState;
   onClearNote: (issue: ComplianceIssue) => void;
   onNoteDraftChange: (issueId: string, value: string) => void;
+  onSelectIssue: (issue: ComplianceIssue) => void;
   onSaveNote: (issue: ComplianceIssue) => void;
+  selected: boolean;
 }) {
   const agencyClasses = agencyStyle(agency);
   const noteChanged = noteDraft !== issue.note;
   const saving = noteState === "saving";
+  const drawingPageNumber = pageNumberForIssue(issue);
+  const marker = markupForIssue(issue);
 
   return (
     <article
-      className={`border border-l-4 border-neutral-200 bg-white p-4 shadow-sm ${agencyClasses.stripe}`}
+      id={issueElementId(issue.id)}
+      className={`border border-l-4 border-neutral-200 bg-white p-4 shadow-sm ${
+        drawingPageNumber ? "cursor-pointer transition hover:border-neutral-300" : ""
+      } ${selected ? "ring-2 ring-teal-700" : ""} ${agencyClasses.stripe}`}
+      onClick={() => {
+        if (drawingPageNumber) {
+          onSelectIssue(issue);
+        }
+      }}
     >
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
@@ -600,16 +1072,29 @@ function IssueCard({
             </span>
           </div>
         </div>
+        {drawingPageNumber ? (
+          <button
+            className="w-fit border border-neutral-300 bg-neutral-50 px-3 py-2 text-sm font-medium text-neutral-800 transition hover:border-teal-700 hover:text-teal-800"
+            onClick={(event) => {
+              event.stopPropagation();
+              onSelectIssue(issue);
+            }}
+            type="button"
+          >
+            View page {drawingPageNumber}
+          </button>
+        ) : null}
       </div>
 
       <p className="mt-4 text-sm leading-6 text-neutral-700">{issue.description}</p>
 
       <dl className="mt-4 grid gap-3 sm:grid-cols-2">
         <InfoBlock label="Drawing location" value={issue.drawing_location} />
-        <InfoBlock label="Issue ID" value={issue.id} mono />
+        <InfoBlock label="Drawing view" value={issue.drawing_view_type || "Not recorded"} />
+        <InfoBlock label="Marker" value={marker ? `${marker.marker_label} · page ${marker.page_number}` : "No marker"} />
       </dl>
 
-      <details className="mt-4 border border-neutral-200 bg-neutral-50">
+      <details className="mt-4 border border-neutral-200 bg-neutral-50" onClick={(event) => event.stopPropagation()}>
         <summary className="cursor-pointer px-3 py-2 text-sm font-semibold text-neutral-900">
           Suggested Resolution
         </summary>
@@ -618,7 +1103,7 @@ function IssueCard({
         </p>
       </details>
 
-      <div className="mt-4 border-t border-neutral-200 pt-4">
+      <div className="mt-4 border-t border-neutral-200 pt-4" onClick={(event) => event.stopPropagation()}>
         <label
           className="text-sm font-semibold text-neutral-900"
           htmlFor={`note-${issue.id}`}
@@ -882,6 +1367,80 @@ function agencyStyle(agency: string) {
 
 function agencyCount(report: ComplianceReport, agency: AgencyReview): number {
   return report.summary.by_agency[agency.agency] ?? agency.issues.length;
+}
+
+function formatAgencyCodes(agencyCodes: AgencyCode[]): string {
+  if (agencyCodes.length === 0) {
+    return "No agencies";
+  }
+
+  return agencyCodes
+    .map((code) => AGENCIES.find((agency) => agency.code === code)?.name ?? code.toUpperCase())
+    .join(", ");
+}
+
+function pageNumberFromLocation(location: string): number | null {
+  const match = location.match(/\b(?:page|pg\.?|p\.)\s*#?\s*(\d+)\b/i);
+  if (!match) {
+    return null;
+  }
+
+  const pageNumber = Number.parseInt(match[1], 10);
+  return pageNumber > 0 ? pageNumber : null;
+}
+
+function pageNumberForIssue(issue: ComplianceIssue): number | null {
+  return issue.markup?.page_number ?? issue.drawing_page_number ?? pageNumberFromLocation(issue.drawing_location);
+}
+
+function markupForIssue(issue: ComplianceIssue): ComplianceIssue["markup"] {
+  if (issue.markup) {
+    return issue.markup;
+  }
+
+  const pageNumber = pageNumberForIssue(issue);
+  if (!pageNumber) {
+    return null;
+  }
+
+  return {
+    page_number: pageNumber,
+    marker_label: "ISSUE",
+    marker_x: 0.08,
+    marker_y: 0.12
+  };
+}
+
+function flattenIssues(agencies: AgencyReview[]): ComplianceIssue[] {
+  return agencies.flatMap((agency) => agency.issues);
+}
+
+function markerClass(severity: Severity, selected: boolean): string {
+  const selectedClass = selected ? "scale-110 ring-4 ring-teal-500" : "";
+  const severityClass =
+    severity === "Critical"
+      ? "border-red-950 bg-red-700 text-white"
+      : severity === "Major"
+        ? "border-amber-950 bg-amber-400 text-amber-950"
+        : "border-sky-950 bg-sky-500 text-white";
+
+  return `${severityClass} ${selectedClass}`;
+}
+
+function issueElementId(issueId: string): string {
+  return `issue-${issueId}`;
+}
+
+function agencyForIssueLabel(markerLabel: string): string {
+  return markerLabel.split("-")[0] || "Issue";
+}
+
+function clampPage(pageNumber: number, pageCount: number): number {
+  if (!Number.isFinite(pageNumber)) {
+    return 1;
+  }
+
+  return Math.min(Math.max(Math.trunc(pageNumber), 1), Math.max(pageCount, 1));
 }
 
 function formatDate(value: string): string {

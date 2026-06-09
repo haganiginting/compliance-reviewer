@@ -1,0 +1,24 @@
+{
+  "samples": [
+    {
+      "name": "known-answer-sample-1",
+      "pdf_path": "drawings/sample-drawing.pdf",
+      "selected_agencies": ["ura", "pub"],
+      "submission_type": "Design",
+      "forbidden_issue_phrases": ["incorrect drawing type phrase"],
+      "expected_findings": [
+        {
+          "agency": "URA",
+          "title": "Example setback finding",
+          "severity": "Major",
+          "keywords": ["setback", "clause", "drawing page"]
+        },
+        {
+          "agency": "PUB",
+          "title": "Example platform level finding",
+          "keywords": ["platform level", "MPL"]
+        }
+      ]
+    }
+  ]
+}

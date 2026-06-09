@@ -1,26 +1,50 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   API_BASE,
   createReview,
   getReview,
   listReviews,
+  type AgencyCode,
+  type DrawingType,
   type ReviewListItem,
-  type ReviewStatus
+  type ReviewStatus,
+  type SubmissionType
 } from "@/lib/api";
 
-const PROJECT_TYPES = ["Residential", "Commercial", "Industrial", "Mixed"] as const;
+const AGENCIES: { code: AgencyCode; name: string }[] = [
+  { code: "bca", name: "BCA" },
+  { code: "scdf", name: "SCDF" },
+  { code: "ura", name: "URA" },
+  { code: "lta", name: "LTA" },
+  { code: "nparks", name: "NParks" },
+  { code: "nea", name: "NEA" },
+  { code: "pub", name: "PUB" }
+];
+const DRAWING_TYPES = [
+  "Floor Plan",
+  "Site Plan",
+  "Section & Elevation",
+  "Drainage",
+  "Fire Safety",
+  "Mixed Set"
+] as const;
+const SUBMISSION_TYPES: SubmissionType[] = ["Design", "Authority Submission"];
 const POLL_INTERVAL_MS = 3000;
-
-type ProjectType = (typeof PROJECT_TYPES)[number];
 
 export function Dashboard() {
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const pollTimeoutRef = useRef<number | null>(null);
-  const [projectType, setProjectType] = useState<ProjectType>("Residential");
+  const [drawingType, setDrawingType] = useState<DrawingType>("Mixed Set");
+  const [submissionType, setSubmissionType] = useState<SubmissionType>("Design");
+  const [selectedAgencies, setSelectedAgencies] = useState<AgencyCode[]>(
+    AGENCIES.map((agency) => agency.code)
+  );
+  const [description, setDescription] = useState("");
+  const [reviewNotes, setReviewNotes] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [dragActive, setDragActive] = useState(false);
   const [reviews, setReviews] = useState<ReviewListItem[]>([]);
@@ -73,6 +97,13 @@ export function Dashboard() {
           return;
         }
 
+        if (review.inventory_status === "needs_confirmation") {
+          stopPolling();
+          setProcessingStatus("Drawing check needs confirmation. Opening the review...");
+          router.push(`/reviews/${reviewId}`);
+          return;
+        }
+
         if (review.status === "error") {
           stopPolling();
           setActiveReviewId(null);
@@ -85,7 +116,7 @@ export function Dashboard() {
           return;
         }
 
-        setProcessingStatus("Review is processing. This can take a few minutes.");
+        setProcessingStatus(review.status_message || "Review is processing. This can take a few minutes.");
         pollTimeoutRef.current = window.setTimeout(() => {
           void pollReview(reviewId);
         }, POLL_INTERVAL_MS);
@@ -125,7 +156,7 @@ export function Dashboard() {
   }, []);
 
   const handleUpload = async () => {
-    if (!selectedFile || isUploading || activeReviewId) {
+    if (!selectedFile || isUploading || activeReviewId || selectedAgencies.length === 0) {
       return;
     }
 
@@ -134,7 +165,14 @@ export function Dashboard() {
     setProcessingStatus("Uploading PDF to the local backend...");
 
     try {
-      const response = await createReview(selectedFile);
+      const response = await createReview({
+        file: selectedFile,
+        drawingType,
+        description,
+        reviewNotes,
+        selectedAgencies,
+        submissionType
+      });
       setActiveReviewId(response.review_id);
       setProcessingStatus("Upload received. Starting review...");
       setSelectedFile(null);
@@ -179,7 +217,7 @@ export function Dashboard() {
               <div>
                 <h2 className="text-lg font-semibold">New review</h2>
                 <p className="mt-1 text-sm text-neutral-600">
-                  Select the closest project category, then upload the drawing PDF.
+                  Add a little drawing context, then upload the PDF.
                 </p>
               </div>
               <span className="border border-teal-200 bg-teal-50 px-2.5 py-1 text-xs font-medium text-teal-800">
@@ -188,22 +226,59 @@ export function Dashboard() {
             </div>
 
             <fieldset className="mt-5">
-              <legend className="text-sm font-medium text-neutral-800">Project type</legend>
+              <legend className="text-sm font-medium text-neutral-800">Agencies to review</legend>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {AGENCIES.map((agency) => {
+                  const selected = selectedAgencies.includes(agency.code);
+
+                  return (
+                    <label
+                      className={`cursor-pointer border px-3 py-2 text-sm font-medium transition ${
+                        selected
+                          ? "border-teal-700 bg-teal-50 text-teal-900"
+                          : "border-neutral-300 bg-white text-neutral-700 hover:border-neutral-500"
+                      }`}
+                      key={agency.code}
+                    >
+                      <input
+                        checked={selected}
+                        className="sr-only"
+                        onChange={() => toggleAgency(agency.code, setSelectedAgencies)}
+                        type="checkbox"
+                      />
+                      {agency.name}
+                    </label>
+                  );
+                })}
+              </div>
+              {selectedAgencies.length === 0 ? (
+                <p className="mt-2 text-sm font-medium text-red-700">
+                  Choose at least one agency before starting the review.
+                </p>
+              ) : (
+                <p className="mt-2 text-sm text-neutral-600">
+                  Selected: {formatAgencyCodes(selectedAgencies)}
+                </p>
+              )}
+            </fieldset>
+
+            <fieldset className="mt-5">
+              <legend className="text-sm font-medium text-neutral-800">Submission type</legend>
               <div className="mt-2 grid grid-cols-2 gap-2">
-                {PROJECT_TYPES.map((type) => (
+                {SUBMISSION_TYPES.map((type) => (
                   <label
                     className={`cursor-pointer border px-3 py-2 text-sm font-medium transition ${
-                      projectType === type
+                      submissionType === type
                         ? "border-teal-700 bg-teal-50 text-teal-900"
                         : "border-neutral-300 bg-white text-neutral-700 hover:border-neutral-500"
                     }`}
                     key={type}
                   >
                     <input
-                      checked={projectType === type}
+                      checked={submissionType === type}
                       className="sr-only"
-                      name="project-type"
-                      onChange={() => setProjectType(type)}
+                      name="submission-type"
+                      onChange={() => setSubmissionType(type)}
                       type="radio"
                     />
                     {type}
@@ -211,6 +286,55 @@ export function Dashboard() {
                 ))}
               </div>
             </fieldset>
+
+            <fieldset className="mt-5">
+              <legend className="text-sm font-medium text-neutral-800">Drawing type</legend>
+              <div className="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {DRAWING_TYPES.map((type) => (
+                  <label
+                    className={`cursor-pointer border px-3 py-2 text-sm font-medium transition ${
+                      drawingType === type
+                        ? "border-teal-700 bg-teal-50 text-teal-900"
+                        : "border-neutral-300 bg-white text-neutral-700 hover:border-neutral-500"
+                    }`}
+                    key={type}
+                  >
+                    <input
+                      checked={drawingType === type}
+                      className="sr-only"
+                      name="drawing-type"
+                      onChange={() => setDrawingType(type)}
+                      type="radio"
+                    />
+                    {type}
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+
+            <div className="mt-5 grid gap-4">
+              <label className="block">
+                <span className="text-sm font-medium text-neutral-800">Short description</span>
+                <textarea
+                  className="mt-2 min-h-24 w-full resize-y border border-neutral-300 bg-white px-3 py-2 text-sm leading-6 text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-teal-700"
+                  maxLength={800}
+                  onChange={(event) => setDescription(event.target.value)}
+                  placeholder="Example: Three-storey landed house with basement, roof terrace, and side boundary works."
+                  value={description}
+                />
+              </label>
+
+              <label className="block">
+                <span className="text-sm font-medium text-neutral-800">Review notes</span>
+                <textarea
+                  className="mt-2 min-h-20 w-full resize-y border border-neutral-300 bg-white px-3 py-2 text-sm leading-6 text-neutral-900 outline-none transition placeholder:text-neutral-400 focus:border-teal-700"
+                  maxLength={800}
+                  onChange={(event) => setReviewNotes(event.target.value)}
+                  placeholder="Optional: areas to pay closer attention to, such as drainage reserve, fire access, or URA envelope."
+                  value={reviewNotes}
+                />
+              </label>
+            </div>
 
             <div
               className={`mt-5 flex min-h-52 flex-col items-center justify-center border-2 border-dashed px-5 py-8 text-center transition ${
@@ -278,10 +402,13 @@ export function Dashboard() {
             ) : null}
 
             <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-neutral-600">Selected type: {projectType}</p>
+              <p className="text-sm text-neutral-600">
+                {submissionType} - {drawingType} - {selectedAgencies.length}{" "}
+                {selectedAgencies.length === 1 ? "agency" : "agencies"}
+              </p>
               <button
                 className="border border-teal-700 bg-teal-700 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:cursor-not-allowed disabled:border-neutral-300 disabled:bg-neutral-300 disabled:text-neutral-600"
-                disabled={!selectedFile || isUploading || Boolean(activeReviewId)}
+                disabled={!selectedFile || selectedAgencies.length === 0 || isUploading || Boolean(activeReviewId)}
                 onClick={handleUpload}
                 type="button"
               >
@@ -334,6 +461,13 @@ export function Dashboard() {
                       >
                         <span className="truncate font-medium text-neutral-900">
                           {review.filename}
+                          <span className="mt-1 block truncate text-xs font-normal text-neutral-500">
+                            {review.submission_type} - {review.drawing_type} -{" "}
+                            {formatAgencyCodes(review.selected_agencies)}
+                            {review.status === "processing" && review.status_message
+                              ? ` - ${review.status_message}`
+                              : ""}
+                          </span>
                         </span>
                         <span className="text-neutral-600">
                           {formatDate(review.created_at)}
@@ -374,6 +508,30 @@ function StatusBadge({ status }: { status: ReviewStatus }) {
 
 function isPdf(file: File): boolean {
   return file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf");
+}
+
+function toggleAgency(
+  agencyCode: AgencyCode,
+  setSelectedAgencies: Dispatch<SetStateAction<AgencyCode[]>>
+) {
+  setSelectedAgencies((current) => {
+    if (current.includes(agencyCode)) {
+      return current.filter((code) => code !== agencyCode);
+    }
+    return AGENCIES.map((agency) => agency.code).filter(
+      (code) => current.includes(code) || code === agencyCode
+    );
+  });
+}
+
+function formatAgencyCodes(agencyCodes: AgencyCode[]): string {
+  if (agencyCodes.length === 0) {
+    return "No agencies";
+  }
+
+  return agencyCodes
+    .map((code) => AGENCIES.find((agency) => agency.code === code)?.name ?? code.toUpperCase())
+    .join(", ");
 }
 
 function readableError(error: unknown): string {

@@ -20,6 +20,8 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from app.config import AGENCIES
+
 
 SEVERITIES = ("Critical", "Major", "Advisory")
 
@@ -93,6 +95,14 @@ def _metadata_table(
         [
             Paragraph("<b>Drawing pages</b>", styles["Label"]),
             Paragraph(_paragraph_text(document.get("page_count", "Unknown")), styles["Body"]),
+        ],
+        [
+            Paragraph("<b>Submission type</b>", styles["Label"]),
+            Paragraph(_paragraph_text(review.get("submission_type", "Design")), styles["Body"]),
+        ],
+        [
+            Paragraph("<b>Selected agencies</b>", styles["Label"]),
+            Paragraph(_paragraph_text(_format_selected_agencies(review.get("selected_agencies", []))), styles["Body"]),
         ],
     ]
     table = Table(rows, colWidths=[33 * mm, 129 * mm], hAlign="LEFT")
@@ -185,6 +195,8 @@ def _issue_block(
     issue: dict[str, Any],
     styles: dict[str, ParagraphStyle],
 ) -> list[Any]:
+    markup = issue.get("markup") if isinstance(issue.get("markup"), dict) else None
+    marker_text = _marker_text(markup)
     metadata = [
         [
             Paragraph("<b>Severity</b>", styles["TinyLabel"]),
@@ -195,8 +207,19 @@ def _issue_block(
         [
             Paragraph("<b>Drawing location</b>", styles["TinyLabel"]),
             Paragraph(_paragraph_text(issue.get("drawing_location")), styles["SmallBody"]),
+            Paragraph("<b>Drawing view</b>", styles["TinyLabel"]),
+            Paragraph(_paragraph_text(issue.get("drawing_view_type") or "Not recorded"), styles["SmallBody"]),
+        ],
+        [
             Paragraph("<b>Issue ID</b>", styles["TinyLabel"]),
             Paragraph(_paragraph_text(issue.get("id", "Not stored")), styles["SmallMono"]),
+            Paragraph("<b>Marker</b>", styles["TinyLabel"]),
+            Paragraph(
+                _paragraph_text(
+                    f"{marker_text}; page {markup.get('page_number') if markup else issue.get('drawing_page_number')}"
+                ),
+                styles["SmallBody"],
+            ),
         ],
     ]
     metadata_table = Table(metadata, colWidths=[26 * mm, 54 * mm, 26 * mm, 56 * mm], hAlign="LEFT")
@@ -239,6 +262,14 @@ def _issue_block(
 
     elements.append(Spacer(1, 1 * mm))
     return elements
+
+
+def _marker_text(markup: dict[str, Any] | None) -> str:
+    if not markup:
+        return "No marker"
+    label = markup.get("marker_label") or "Marker"
+    page_number = markup.get("page_number")
+    return f"{label} on page {page_number}" if page_number else str(label)
 
 
 def _build_styles() -> dict[str, ParagraphStyle]:
@@ -366,3 +397,14 @@ def _paragraph_text(value: Any) -> str:
     text = "Not provided" if value is None else str(value)
     escaped = escape(text.strip() or "Not provided")
     return escaped.replace("\n", "<br/>")
+
+
+def _format_selected_agencies(selected_agencies: Any) -> str:
+    if not isinstance(selected_agencies, list) or not selected_agencies:
+        return "Not provided"
+
+    names: list[str] = []
+    for code in selected_agencies:
+        agency = AGENCIES.get(str(code).lower().strip())
+        names.append(agency.name if agency else str(code).upper())
+    return ", ".join(names)

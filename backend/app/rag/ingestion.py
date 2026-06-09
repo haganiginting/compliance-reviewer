@@ -13,12 +13,16 @@ from llama_index.core.schema import Document, MetadataMode
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.vector_stores.chroma import ChromaVectorStore
 
-from app.config import AGENCIES, ACTIVE_AGENCY_CODES, CHROMA_DIR, EMBEDDING_MODEL, SOURCE_PDFS_DIR
+from app.config import (
+    AGENCIES,
+    ACTIVE_AGENCY_CODES,
+    CHROMA_DIR,
+    EMBEDDING_MODEL,
+    RAG_CHUNK_OVERLAP,
+    RAG_CHUNK_SIZE,
+    SOURCE_PDFS_DIR,
+)
 from app.rag.models import AgencyIngestSummary
-
-
-CHUNK_SIZE = 900
-CHUNK_OVERLAP = 120
 
 
 @dataclass(frozen=True)
@@ -120,9 +124,9 @@ def build_embedding_model() -> HuggingFaceEmbedding:
 
 
 def build_sentence_splitter() -> SentenceSplitter:
-    # 900 tokens preserves enough clause context for code requirements, while
-    # 120 tokens of overlap keeps cross-boundary definitions and exceptions.
-    return SentenceSplitter(chunk_size=CHUNK_SIZE, chunk_overlap=CHUNK_OVERLAP)
+    # Configured chunking preserves enough clause context for code requirements,
+    # while overlap keeps cross-boundary definitions and exceptions.
+    return SentenceSplitter(chunk_size=RAG_CHUNK_SIZE, chunk_overlap=RAG_CHUNK_OVERLAP)
 
 
 def collection_name_for_agency(agency_code: str) -> str:

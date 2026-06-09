@@ -4,7 +4,7 @@ from pathlib import Path
 
 import chromadb
 
-from app.config import CHROMA_DIR
+from app.config import CHROMA_DIR, retrieval_top_k_for_agency
 from app.rag.ingestion import build_embedding_model, collection_name_for_agency
 from app.rag.models import RetrievedChunk
 
@@ -12,9 +12,10 @@ from app.rag.models import RetrievedChunk
 def retrieve_chunks(
     agency_code: str,
     query: str,
-    top_k: int = 3,
+    top_k: int | None = None,
     chroma_dir: Path = CHROMA_DIR,
 ) -> list[RetrievedChunk]:
+    result_count = top_k if top_k is not None else retrieval_top_k_for_agency(agency_code)
     collection_name = collection_name_for_agency(agency_code)
     client = chromadb.PersistentClient(path=str(chroma_dir))
     collection = client.get_collection(collection_name)
@@ -23,7 +24,7 @@ def retrieve_chunks(
     query_embedding = embed_model.get_query_embedding(query)
     results = collection.query(
         query_embeddings=[query_embedding],
-        n_results=top_k,
+        n_results=result_count,
         include=["documents", "metadatas", "distances"],
     )
 
@@ -44,4 +45,3 @@ def retrieve_chunks(
             )
         )
     return chunks
-
